@@ -1,9 +1,5 @@
-# GHCR Container Image Template
+# K8TRE backend
 
-A template repository for automatically building and pushing container (Docker) images to [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+[![Build](https://github.com/k8tre/k8tre-backend/actions/workflows/build.yml/badge.svg)](https://github.com/k8tre/k8tre-backend/actions/workflows/build.yml)
 
-To use this repository click `Use this template` and modify [`Dockerfile`](Dockerfile).
-
-[GitHub actions](.github/workflows/build.yml) will build every image for AMD64 and ARM64.
-- Every push to `main` is pushed to `ghcr.io/${{ github.repository }}:main`.
-- Tags are pushed to `ghcr.io/${{ github.repository }}:TAG`.
+This is the backend application for [K8TRE](https://github.com/k8tre/k8tre), extracted from https://github.com/k8tre/k8tre/tree/670dea90ad3117dc22dcc222c2bbdab0b1f83726/ci/backend.
