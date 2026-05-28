@@ -298,27 +298,33 @@ def _sign(user, project, audience):
     signature = hmac.new(AUTH_SIG_SECRET.encode(), payload, hashlib.sha256).hexdigest()
     return stamp, signature, audience
 
+def _get_user_groups_and_projects(username):
+    """ Helper to get user's groups and projects from K8s CRDs
+    """
+    user_cr = k8s_api.get_namespaced_custom_object(
+        "identity.k8tre.io", "v1alpha1", NAMESPACE, "users", username
+    )
+    user_groups = user_cr['spec'].get('groups', [])
+    projects = set()
+    for group_name in user_groups:
+        try:
+            group_cr = k8s_api.get_namespaced_custom_object(
+                "identity.k8tre.io", "v1alpha1", NAMESPACE, "groups", group_name
+            )
+            group_projects = group_cr['spec'].get('projects', [])
+            projects.update(group_projects)
+        except Exception:
+            continue
+    return user_groups, projects
+
 def _is_user_authorised_project(username, project):
     """ Check if user has access to a project via their groups
     """
     try:
-        user_cr = k8s_api.get_namespaced_custom_object(
-            "identity.k8tre.io", "v1alpha1", NAMESPACE, "users", username
-        )
-        user_groups = user_cr['spec'].get('groups', [])
-
-        # Check if user has access to this project
-        for group_name in user_groups:
-            try:
-                group_cr = k8s_api.get_namespaced_custom_object(
-                    "identity.k8tre.io", "v1alpha1", NAMESPACE, "groups", group_name
-                )
-                group_projects = group_cr['spec'].get('projects', [])
-                if project in group_projects:
-                    print(f"User {username} authorised for project {project} via group {group_name}", flush=True)
-                    return True
-            except Exception:
-                continue
+        _, projects = _get_user_groups_and_projects(username)
+        if project in projects:
+            print(f"User {username} authorised for project {project}", flush=True)
+            return True
 
         print(f"User {username} not authorised for project {project}", flush=True)
         return False
@@ -1098,13 +1104,7 @@ async def custom_http_exception_handler(request: Request, exc: FastAPIHTTPExcept
 def get_projects(request: Request, user=Depends(require_user)):
     """ To access all the projects from the CRDs
     """
-    # user's groups
     username = user["preferred_username"]
-    try:
-        user_cr = k8s_api.get_namespaced_custom_object(
-            "identity.k8tre.io", "v1alpha1", NAMESPACE, "users", username)
-    except Exception as e:
-        return templates.TemplateResponse("error.html", {"request": request, "error": f"User CR not found: {e}"})
 
     # Checks for vdi context
     vdi_context = request.session.get("vdi_context", False)
@@ -1435,22 +1435,12 @@ def get_projects_json(request: Request, user=Depends(require_user)):
     """
     username = user["preferred_username"]
     try:
-        user_cr = k8s_api.get_namespaced_custom_object(
-            "identity.k8tre.io", "v1alpha1", NAMESPACE, "users", username)
+        _, projects = _get_user_groups_and_projects(username)
     except Exception as e:
         return JSONResponse({"error": f"User CR not found: {e}"}, status_code=404)
 
     vdi_context = request.session.get("vdi_context", False)
     vdi_project = request.session.get("vdi_project")
-    groups = user_cr['spec'].get('groups', [])
-    projects = set()
-    for group_name in groups:
-        try:
-            group_cr = k8s_api.get_namespaced_custom_object(
-                "identity.k8tre.io", "v1alpha1", NAMESPACE, "groups", group_name)
-            projects.update(group_cr['spec'].get('projects', []))
-        except Exception:
-            continue
 
     # Filter projects if in VDI context
     if vdi_context and vdi_project:
