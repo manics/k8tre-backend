@@ -1312,6 +1312,27 @@ async def launch_app(project: str, app: str, request: Request, user=Depends(requ
             {"vdi_project": vdi_project, "requested_project": project}
         )
 
+    try:
+        project_cr = k8s_api.get_namespaced_custom_object(
+            "research.k8tre.io", "v1alpha1", NAMESPACE, "projects", project)
+        app_cfg = next((a for a in project_cr['spec'].get('apps', []) if a['name'] == app), None)
+
+        if not app_cfg:
+            raise HTTPException(status_code=404, detail="App not found for this project")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=404, detail=f"Project/app not found: {e}")
+
+    # Prevent non-VDI apps from being launched outside a VDI
+    if not vdi_context and app_cfg["type"] != "vdi":
+        print(f"WARNING: User attempting to launch non-VDI app {app} outside VDI context", flush=True)
+        return templates.TemplateResponse(
+            request,
+            "non-vdi-warning.html",
+            {"project": project, "app": app}
+        )
+
     # Get or refresh project token
     valid_token = await ensure_valid_token(request, project=project)
     if not valid_token:
@@ -1326,13 +1347,6 @@ async def launch_app(project: str, app: str, request: Request, user=Depends(requ
     request.session["user"] = user
 
     try:
-        project_cr = k8s_api.get_namespaced_custom_object(
-            "research.k8tre.io", "v1alpha1", NAMESPACE, "projects", project)
-        app_cfg = next((a for a in project_cr['spec'].get('apps', []) if a['name'] == app), None)
-
-        if not app_cfg:
-            raise HTTPException(status_code=404, detail="App not found for this project")
-
         if app_cfg["type"] == "vdi":
             vdi_name = f"{username}-{project}"
             vdi_spec = {

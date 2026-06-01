@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="alert alert-warning" role="alert">
+  <h4 class="alert-heading">VDI Session Required</h4>
+  <p>
+    The application <strong>{{ app }}</strong> can only be launched from within a VDI session.
+    This safeguard ensures that network restrictions and security policies are properly enforced.
+  </p>
+  <hr />
+  <p class="mb-0">
+    <strong>Possible Next Steps:</strong>
+  </p>
+  <ul>
+    <li>First launch a VDI for the <strong>{{ project }}</strong> project, and then open this application from the desktop shortcut inside that VDI.</li>
+    <li>If you are already inside a VDI session, verify that you have logged in via the SSO link within the VDI.</li>
+  </ul>
+  <div class="mt-3">
+    <a href="/projects/{{ project }}/apps" class="btn btn-secondary">Back to Apps</a>
+    <a href="/launch/{{ project }}/vdi" class="btn btn-primary">Launch VDI</a>
+  </div>
+</div>
+{% endblock %}

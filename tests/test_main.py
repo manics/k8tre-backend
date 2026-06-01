@@ -1,6 +1,6 @@
 import os
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
 
 # ---------------------------------------------------------
 # 1. ENVIRONMENT SETUP (Must happen before importing main)
@@ -332,3 +332,82 @@ def test_api_refresh_token_valid(mock_decode):
     response = client.get("/api/refresh-token?current_token=valid&project=test&user=testuser")
     assert response.status_code == 200
     assert response.json()["status"] == "valid"
+
+# ---------------------------------------------------------
+# 11. LAUNCH APP Safeguard Tests
+# ---------------------------------------------------------
+
+@patch("main.ensure_valid_token", new_callable=AsyncMock)
+@patch("main.k8s_api.get_namespaced_custom_object")
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
+def test_launch_non_vdi_app_outside_vdi(mock_session, mock_get_cr, mock_ensure_token):
+    """Test that launching a non-VDI app outside a VDI context is blocked."""
+    # Set session: vdi_context is False
+    mock_session.return_value = {"vdi_context": False}
+    
+    # Mock project CR containing a non-VDI app (e.g. jupyter)
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "jupyter", "type": "jupyter"}
+            ]
+        }
+    }
+    mock_ensure_token.return_value = "valid-token-123"
+    
+    response = client.get("/launch/test-project/jupyter")
+    assert response.status_code == 200
+    assert "VDI Session Required" in response.text
+    assert "jupyter" in response.text
+
+
+@patch("main.ensure_valid_token", new_callable=AsyncMock)
+@patch("main.k8s_api.get_namespaced_custom_object")
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
+def test_launch_non_vdi_app_inside_vdi(mock_session, mock_get_cr, mock_ensure_token):
+    """Test that launching a non-VDI app inside a VDI context succeeds (redirects)."""
+    # Set session: vdi_context is True
+    mock_session.return_value = {"vdi_context": True, "vdi_project": "test-project"}
+    
+    # Mock project CR containing a non-VDI app (e.g. jupyter)
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "jupyter", "type": "jupyter"}
+            ]
+        }
+    }
+    mock_ensure_token.return_value = "valid-token-123"
+    
+    response = client.get("/launch/test-project/jupyter", follow_redirects=False)
+    assert response.status_code == 307
+    assert "/hub/login" in response.headers["location"]
+
+
+@patch("main.client.CustomObjectsApi")
+@patch("main.ensure_valid_token", new_callable=AsyncMock)
+@patch("main.k8s_api.get_namespaced_custom_object")
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
+def test_launch_vdi_app_outside_vdi(mock_session, mock_get_cr, mock_ensure_token, mock_crd_client):
+    """Test that launching a VDI app outside a VDI context succeeds (starts VDI and redirects)."""
+    # Set session: vdi_context is False
+    mock_session.return_value = {"vdi_context": False, "_session_id": "test-session-id"}
+    
+    # Mock project CR containing a VDI app
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "vdi", "type": "vdi"}
+            ]
+        }
+    }
+    mock_ensure_token.return_value = "valid-token-123"
+    
+    # Mock custom object API creation
+    mock_crd_inst = MagicMock()
+    mock_crd_client.return_value = mock_crd_inst
+    
+    response = client.get("/launch/test-project/vdi", follow_redirects=False)
+    assert response.status_code == 307
+    assert "/vdi/status/testuser/test-project" in response.headers["location"]
+    assert mock_crd_inst.create_namespaced_custom_object.called
