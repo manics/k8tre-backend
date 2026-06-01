@@ -12,13 +12,46 @@ env:
   PUBLISH_BRANCH: "main"
   PLATFORMS: linux/amd64,linux/arm64
 
+permissions:
+  contents: read
+
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install Python dependencies
+        run: |
+          pip install pytest -r requirements.txt
+          pip freeze
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          pip freeze
+
+      - name: Run tests
+        run: |
+          python -m pytest -v
+
   container:
     name: Container
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
+
+    needs:
+      - test
 
     steps:
       - name: Decide whether to push image to registry
