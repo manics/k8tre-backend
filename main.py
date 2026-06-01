@@ -1159,6 +1159,10 @@ def get_apps(project: str, request: Request, user=Depends(require_user)):
         project_cr = k8s_api.get_namespaced_custom_object(
             "research.k8tre.io", "v1alpha1", NAMESPACE, "projects", project)
         apps = project_cr['spec'].get('apps', [])
+        if vdi_context:
+            apps = [a for a in apps if a.get("name") not in ["vdi", "guacamole"] and a.get("type") not in ["vdi", "guacamole"]]
+        else:
+            apps = [a for a in apps if a.get("type") == "vdi"]
         return templates.TemplateResponse(
             request,
             "apps.html",
@@ -1492,7 +1496,12 @@ def get_apps_json(project: str, request: Request, user=Depends(require_user)):
     try:
         project_cr = k8s_api.get_namespaced_custom_object(
             "research.k8tre.io", "v1alpha1", NAMESPACE, "projects", project)
-        return {"apps": project_cr['spec'].get('apps', []), "vdi_context": vdi_context}
+        apps = project_cr['spec'].get('apps', [])
+        if vdi_context:
+            apps = [a for a in apps if a.get("name") not in ["vdi", "guacamole"] and a.get("type") not in ["vdi", "guacamole"]]
+        else:
+            apps = [a for a in apps if a.get("type") == "vdi"]
+        return {"apps": apps, "vdi_context": vdi_context}
     except Exception as e:
         return JSONResponse({"error": f"Project not found: {e}"}, status_code=404)
 

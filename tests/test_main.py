@@ -244,22 +244,81 @@ def test_api_cleanup_session(mock_revoke):
 # 8. APPS AND VDI ROUTING
 # ---------------------------------------------------------
 
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
 @patch("main.k8s_api.get_namespaced_custom_object")
-def test_get_apps_html_success(mock_get_cr):
-    """Test /projects/{project}/apps HTML page."""
-    mock_get_cr.return_value = {"spec": {"apps": [{"name": "jupyter", "type": "jupyter"}]}}
+def test_get_apps_html_success_outside_vdi(mock_get_cr, mock_session):
+    """Test /projects/{project}/apps HTML page outside VDI (only shows VDI apps)."""
+    mock_session.return_value = {"vdi_context": False}
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "jupyter", "type": "jupyter"},
+                {"name": "vdi", "type": "vdi"}
+            ]
+        }
+    }
+    response = client.get("/projects/test-project/apps")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "vdi" in response.text
+    assert "jupyter" not in response.text
+
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
+@patch("main.k8s_api.get_namespaced_custom_object")
+def test_get_apps_html_success_inside_vdi(mock_get_cr, mock_session):
+    """Test /projects/{project}/apps HTML page inside VDI (excludes VDI apps)."""
+    mock_session.return_value = {"vdi_context": True, "vdi_project": "test-project"}
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "jupyter", "type": "jupyter"},
+                {"name": "vdi", "type": "vdi"}
+            ]
+        }
+    }
     response = client.get("/projects/test-project/apps")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "jupyter" in response.text
+    assert "vdi" not in response.text
 
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
 @patch("main.k8s_api.get_namespaced_custom_object")
-def test_get_apps_json_success(mock_get_cr):
-    """Test /api/projects/{project}/apps JSON endpoint."""
-    mock_get_cr.return_value = {"spec": {"apps": [{"name": "jupyter", "type": "jupyter"}]}}
+def test_get_apps_json_success_outside_vdi(mock_get_cr, mock_session):
+    """Test /api/projects/{project}/apps JSON endpoint outside VDI (only shows VDI apps)."""
+    mock_session.return_value = {"vdi_context": False}
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "jupyter", "type": "jupyter"},
+                {"name": "vdi", "type": "vdi"}
+            ]
+        }
+    }
     response = client.get("/api/projects/test-project/apps")
     assert response.status_code == 200
-    assert response.json()["apps"][0]["name"] == "jupyter"
+    apps = response.json()["apps"]
+    assert len(apps) == 1
+    assert apps[0]["name"] == "vdi"
+
+@patch("starlette.requests.Request.session", new_callable=PropertyMock)
+@patch("main.k8s_api.get_namespaced_custom_object")
+def test_get_apps_json_success_inside_vdi(mock_get_cr, mock_session):
+    """Test /api/projects/{project}/apps JSON endpoint inside VDI (excludes VDI apps)."""
+    mock_session.return_value = {"vdi_context": True, "vdi_project": "test-project"}
+    mock_get_cr.return_value = {
+        "spec": {
+            "apps": [
+                {"name": "jupyter", "type": "jupyter"},
+                {"name": "vdi", "type": "vdi"}
+            ]
+        }
+    }
+    response = client.get("/api/projects/test-project/apps")
+    assert response.status_code == 200
+    apps = response.json()["apps"]
+    assert len(apps) == 1
+    assert apps[0]["name"] == "jupyter"
 
 @patch("main._is_user_authorised_project")
 @patch("main.verify_token")
