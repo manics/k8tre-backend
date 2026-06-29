@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import jwt
 import time
+import traceback
 import asyncio
 import socket
 import urllib.parse
@@ -708,7 +709,6 @@ async def auth_callback(request: Request):
         print(f"Auth callback error: {e}", flush=True)
         print(f"Error type: {type(e).__name__}", flush=True)
         print(f"Error details: {repr(e)}", flush=True)
-        import traceback
         print(f"Traceback: {traceback.format_exc()}", flush=True)
         request.session.clear()
         return RedirectResponse("/")
@@ -1324,7 +1324,6 @@ async def launch_app(project: str, app: str, request: Request, user=Depends(requ
         if not app_cfg:
             raise HTTPException(status_code=404, detail="App not found for this project")
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=404, detail=f"Project/app not found: {e}")
 
@@ -1443,7 +1442,6 @@ async def launch_app(project: str, app: str, request: Request, user=Depends(requ
         return resp
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=404, detail=f"Project/app not found: {e}")
 
